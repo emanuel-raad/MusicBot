@@ -70,6 +70,7 @@ class MusicBot(discord.Client):
         self.init_ok = False
         self.cached_app_info = None
         self.last_status = None
+        self.last_song_list = []
 
         self.config = Config(config_file)
         
@@ -456,10 +457,68 @@ class MusicBot(discord.Client):
 
         return player
 
+    def update_last_song_list(self, player):
+        self.last_song_list.append(player.current_entry)
+        log.debug("Adding to undo list: {}".format(player.current_entry.title))
+        
+        lst = [entry.title for entry in self.last_song_list]
+        log.debug("Back queue: {}".format(lst))
+
+    def clear_last_song_list(self):
+        log.debug("CLEARING UNDO LIST")
+        self.last_song_list = []
+
+    async def cmd_backqueue(self):
+        log.debug([entry.title for entry in self.last_song_list])
+
+    async def cmd_back(self, message, player, channel, author, permissions, voice_channel):
+        if len(self.last_song_list) == 1 or len(self.last_song_list) == 0:
+            return Response("No songs last played", delete_after=15)
+        elif len(self.last_song_list) > 1:
+            last_entry = self.last_song_list[-2]
+            current_entry = self.last_song_list[-1]
+
+            self.last_song_list = self.last_song_list[:-2]
+            log.debug("AFTER BACK")
+            log.debug([entry.title for entry in self.last_song_list])
+            
+            log.debug("LAST ENTRY: {}".format(last_entry.title))
+            log.debug("LAST ENTRY: {}".format(last_entry.url))
+
+            event_loop = asyncio.get_event_loop()
+
+            # await event_loop.create_task(
+            #     self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
+            #     self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url),
+            # )
+
+            # self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
+            # self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url),
+            # self.cmd_skip(player, channel, author, message, permissions, voice_channel)
+
+            await asyncio.gather(
+                self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
+                self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url)
+            )
+
+            await asyncio.gather(
+                self.cmd_skip(player, channel, author, message, permissions, voice_channel)
+            )
+            
+            # await asyncio.gather(*coros, return_exceptions=True)
+
+            return Response("Back to: {}".format(last_entry.title), delete_after=15)
+        
+        else:
+            return Response("Unknown error, tell Manny", delete_after=15)
+
     async def on_player_play(self, player, entry):
         log.debug('Running on_player_play')
+
         await self.update_now_playing_status(entry)
         player.skip_state.reset()
+
+        self.update_last_song_list(player)
 
         # This is the one event where its ok to serialize autoplaylist entries
         await self.serialize_queue(player.voice_client.channel.guild)
@@ -530,6 +589,7 @@ class MusicBot(discord.Client):
 
     async def on_player_stop(self, player, **_):
         log.debug('Running on_player_stop')
+        self.clear_last_song_list()
         await self.update_now_playing_status()
 
     async def on_player_finished_playing(self, player, **_):
@@ -1300,20 +1360,20 @@ class MusicBot(discord.Client):
             )
         return True
         
-    async def cmd_test(self, message, player, channel, author, permissions, leftover_args, song_url):
-        print(song_url)
-        print(leftover_args)
+    # async def cmd_test(self, message, player, channel, author, permissions, leftover_args, song_url):
+    #     print(song_url)
+    #     print(leftover_args)
         
-        playNext = False
-        if song_url == '-next' or song_url == '-n':
-            playNext = True
-            song_url = leftover_args[0]
-            leftover_args.pop(0)
+    #     playNext = False
+    #     if song_url == '-next' or song_url == '-n':
+    #         playNext = True
+    #         song_url = leftover_args[0]
+    #         leftover_args.pop(0)
                     
-        print(song_url)
-        print(leftover_args)
+    #     print(song_url)
+    #     print(leftover_args)
         
-        return True
+    #     return True
         
     async def cmd_play(self, message, player, channel, author, permissions, leftover_args, song_url):
         """
@@ -1637,8 +1697,14 @@ class MusicBot(discord.Client):
             return Response("The alias '{}' was not found.".format(alias))
 
     async def cmd_playnext(self, message, player, channel, author, permissions, leftover_args, song_url):
-        leftover_args.insert(0, song_url)
-        song_url = '-next'
+        # not clean but meh
+        if leftover_args:
+            leftover_args.insert(0, song_url)
+            song_url = '-next'
+        else:
+            leftover_args = [song_url]
+            song_url = '-next'
+
         return await self.cmd_play(message, player, channel, author, permissions, leftover_args, song_url)
             
     async def _cmd_play_playlist_async(self, player, channel, author, permissions, playlist_url, extractor_type):
