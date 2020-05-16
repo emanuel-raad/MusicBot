@@ -1299,7 +1299,22 @@ class MusicBot(discord.Client):
                 expire_in=30
             )
         return True
-
+        
+    async def cmd_test(self, message, player, channel, author, permissions, leftover_args, song_url):
+        print(song_url)
+        print(leftover_args)
+        
+        playNext = False
+        if song_url == '-next' or song_url == '-n':
+            playNext = True
+            song_url = leftover_args[0]
+            leftover_args.pop(0)
+                    
+        print(song_url)
+        print(leftover_args)
+        
+        return True
+        
     async def cmd_play(self, message, player, channel, author, permissions, leftover_args, song_url):
         """
         Usage:
@@ -1314,7 +1329,13 @@ class MusicBot(discord.Client):
         it will use the metadata (e.g song name and artist) to find a YouTube
         equivalent of the song. Streaming from Spotify is not possible.
         """
-
+        
+        playNext = False
+        if song_url == '-next' or song_url == '-n':
+            playNext = True
+            song_url = leftover_args[0]
+            leftover_args.pop(0)
+            
         song_url = song_url.strip('<>')
 
         await self.send_typing(channel)
@@ -1557,9 +1578,9 @@ class MusicBot(discord.Client):
                         self.str.get('cmd-play-song-limit', "Song duration exceeds limit ({0} > {1})").format(info['duration'], permissions.max_song_length),
                         expire_in=30
                     )
-
-                entry, position = await player.playlist.add_entry(song_url, channel=channel, author=author)
-
+                    
+                entry, position = await player.playlist.add_entry(song_url, playNext=playNext, channel=channel, author=author)
+                
                 reply_text = self.str.get('cmd-play-song-reply', "Enqueued `%s` to be played. Position in queue: %s")
                 btext = entry.title
 
@@ -1578,7 +1599,48 @@ class MusicBot(discord.Client):
                 reply_text %= (btext, position, ftimedelta(time_until))
 
         return Response(reply_text, delete_after=30)
+        
+    async def cmd_pl(self, message, player, channel, author, permissions, leftover_args, alias):
+        """
+        Usage:
+            {command_prefix}pl alias
+            
+        Plays a playlist from a file containing aliases for the youtube url
+        
+        Create a file 'config/playlist_alias.ini' and add any number of alias' each
+        on their own new line.
+        ex:
+        
+        alias_1 youtube_url_1
+        alias_2 youtube_url_2
+        alias_3 youtube_url_3
+        ...
 
+        """
+        
+        filepath = "config/playlist_alias.ini"
+        playlist_url = None
+        
+        if not os.path.isfile(filepath):
+            return Response("File 'config/playlist_alias.ini' does not exist.")
+        
+        with open(filepath) as fp:
+            for line in fp:
+                line_alias = line.split(None, 1)[0]
+                line_url = line.split(None, 1)[1]
+                if alias.lower() == line_alias.lower():
+                    playlist_url = line_url
+
+        if playlist_url is not None:
+            return await self.cmd_play(message, player, channel, author, permissions, leftover_args, playlist_url)
+        else:
+            return Response("The alias '{}' was not found.".format(alias))
+
+    async def cmd_playnext(self, message, player, channel, author, permissions, leftover_args, song_url):
+        leftover_args.insert(0, song_url)
+        song_url = '-next'
+        return await self.cmd_play(message, player, channel, author, permissions, leftover_args, song_url)
+            
     async def _cmd_play_playlist_async(self, player, channel, author, permissions, playlist_url, extractor_type):
         """
         Secret handler to use the async wizardry to make playlist queuing non-"blocking"
