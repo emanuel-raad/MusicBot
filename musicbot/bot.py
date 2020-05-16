@@ -499,7 +499,7 @@ class MusicBot(discord.Client):
             await asyncio.gather(
                 self.cmd_skip(player, channel, author, message, permissions, voice_channel)
             )
-            
+
             return Response("Back to: {}".format(last_entry.title), delete_after=15)
         
         else:
@@ -2174,6 +2174,10 @@ class MusicBot(discord.Client):
                 self.str.get('cmd-remove-noperms', "You do not have the valid permissions to remove that entry from the queue, make sure you're the one who queued it or have instant skip permissions"), expire_in=20
             )
 
+    def player_remove_n_times(self, player, n):
+        for i in reversed(range(1, n)):
+            player.playlist.remove_entry(i-1)
+
     async def cmd_skip(self, player, channel, author, message, permissions, voice_channel, param=''):
         """
         Usage:
@@ -2182,6 +2186,13 @@ class MusicBot(discord.Client):
         Skips the current song when enough votes are cast.
         Owners and those with the instaskip permission can add 'force' or 'f' after the command to force skip.
         """
+        
+        skipTimes = 1
+        for word in message.clean_content:
+            if word.isdigit():
+                skipTimes = int(word)
+                break
+        log.debug("Skipping n={}".format(skipTimes))
 
         if player.is_stopped:
             raise exceptions.CommandError(self.str.get('cmd-skip-none', "Can't skip! The player is not playing!"), expire_in=20)
@@ -2206,7 +2217,9 @@ class MusicBot(discord.Client):
             if permissions.instaskip \
                 or (self.config.allow_author_skip and author == player.current_entry.meta.get('author', None)):
 
-                player.skip()  # TODO: check autopause stuff here
+                self.player_remove_n_times(player, skipTimes)
+                player.skip()
+
                 await self._manual_delete_check(message)
                 return Response(self.str.get('cmd-skip-force', 'Force skipped `{}`.').format(current_entry.title), reply=True, delete_after=30)
             else:
@@ -2227,7 +2240,11 @@ class MusicBot(discord.Client):
         ) - num_skips
 
         if skips_remaining <= 0:
-            player.skip()  # check autopause stuff here
+
+            # Multiple skip snippet:
+            self.player_remove_n_times(player, skipTimes)
+            player.skip()
+            
             # @TheerapakG: Check for pausing state in the player.py make more sense
             return Response(
                 self.str.get('cmd-skip-reply-skipped-1', 'Your skip for `{0}` was acknowledged.\nThe vote to skip has been passed.{1}').format(

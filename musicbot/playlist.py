@@ -318,7 +318,9 @@ class Playlist(EventEmitter, Serializable):
             entry.get_ready_future()
 
     def remove_entry(self, index):
-        del self.entries[index]
+        log.debug("LEN:{}      INDEX:{}".format(len(self.entries), index))
+        if len(self.entries) > (index):
+            del self.entries[index]
 
     async def get_next_entry(self, predownload_next=True):
         """
