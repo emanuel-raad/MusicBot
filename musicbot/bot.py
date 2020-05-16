@@ -468,6 +468,7 @@ class MusicBot(discord.Client):
         log.debug("CLEARING UNDO LIST")
         self.last_song_list = []
 
+    @dev_only
     async def cmd_backqueue(self):
         log.debug([entry.title for entry in self.last_song_list])
 
@@ -479,34 +480,26 @@ class MusicBot(discord.Client):
             current_entry = self.last_song_list[-1]
 
             self.last_song_list = self.last_song_list[:-2]
-            log.debug("AFTER BACK")
-            log.debug([entry.title for entry in self.last_song_list])
+            # log.debug("AFTER BACK")
+            # log.debug([entry.title for entry in self.last_song_list])
             
-            log.debug("LAST ENTRY: {}".format(last_entry.title))
-            log.debug("LAST ENTRY: {}".format(last_entry.url))
+            # log.debug("LAST ENTRY: {}".format(last_entry.title))
+            # log.debug("LAST ENTRY: {}".format(last_entry.url))
 
-            event_loop = asyncio.get_event_loop()
+            # Add the current song and last song to the queue, then skip
+            # to give the illusion of going back one
 
-            # await event_loop.create_task(
-            #     self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
-            #     self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url),
-            # )
-
-            # self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
-            # self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url),
-            # self.cmd_skip(player, channel, author, message, permissions, voice_channel)
-
+            # First add the songs to queue
             await asyncio.gather(
                 self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=current_entry.url),
                 self.cmd_playnext(message, player, channel, author, permissions, leftover_args=None, song_url=last_entry.url)
             )
 
+            # Then skip
             await asyncio.gather(
                 self.cmd_skip(player, channel, author, message, permissions, voice_channel)
             )
             
-            # await asyncio.gather(*coros, return_exceptions=True)
-
             return Response("Back to: {}".format(last_entry.title), delete_after=15)
         
         else:
