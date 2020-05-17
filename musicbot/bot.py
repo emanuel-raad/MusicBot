@@ -458,8 +458,9 @@ class MusicBot(discord.Client):
         return player
 
     def update_last_song_list(self, player):
-        self.last_song_list.append(player.current_entry)
-        log.debug("Adding to undo list: {}".format(player.current_entry.title))
+        if player.current_entry is not None:
+            self.last_song_list.append(player.current_entry)
+            log.debug("Adding to undo list: {}".format(player.current_entry.title))
         
         lst = [entry.title for entry in self.last_song_list]
         log.debug("Back queue: {}".format(lst))
